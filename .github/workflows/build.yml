@@ -1,46 +1,42 @@
-name: Build Custom Gaming OS
+name: Build Gaming OS 2026
 on:
   push:
-    branches: [ main ]
+    branches: [ main, master ]
   workflow_dispatch:
 
 jobs:
   build-iso:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout Repository
+      - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Fix Permissions and Folders
+      - name: Setup Profile
         run: |
-          # Ensure scripts are executable before the build starts
-          chmod +x gaming-optimizations.sh
+          # 1. Force move files to where the builder expects them
+          find . -name "packages.x86_64" -exec cp {} ./packages.x86_64 \;
+          find . -name "gaming-optimizations.sh" -exec cp {} ./gaming-optimizations.sh \;
           
-          # Create the required internal folder structure
+          # 2. Setup the internal ISO folders
           mkdir -p archiso_config/airootfs/root/
           mkdir -p archiso_config/airootfs/etc/systemd/system/multi-user.target.wants/
           
-          # Create the boot-time service file
+          # 3. Create the startup service
           cat <<EOF > archiso_config/airootfs/etc/systemd/system/optimize.service
           [Unit]
-          Description=Extreme Gaming Optimizations
+          Description=Gaming Tweaks
           After=network.target
-
           [Service]
           Type=oneshot
           ExecStart=/usr/bin/bash /root/gaming-optimizations.sh
-          RemainAfterExit=yes
-
           [Install]
           WantedBy=multi-user.target
           EOF
-
-          # Enable the service inside the ISO
+          
           ln -sf /etc/systemd/system/optimize.service archiso_config/airootfs/etc/systemd/system/multi-user.target.wants/optimize.service
 
-      - name: Run Archiso Build
+      - name: Build with Docker
         run: |
-          # We use --privileged because mkarchiso needs to mount file systems
           docker run --privileged -v ${{ github.workspace }}:/work archlinux:latest bash -c "
             pacman -Syu --noconfirm archiso && 
             cp -r /usr/share/archiso/configs/releng/* /work/archiso_config/ &&
@@ -50,8 +46,8 @@ jobs:
             cd /work && mkarchiso -v -w /work/work_dir -o /work/out /work/archiso_config
           "
 
-      - name: Upload Resulting ISO
+      - name: Upload
         uses: actions/upload-artifact@v4
         with:
-          name: GamingOS-Installer
+          name: GamingOS-2026
           path: out/*.iso
