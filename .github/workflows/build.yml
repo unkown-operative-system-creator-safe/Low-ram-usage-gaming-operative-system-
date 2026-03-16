@@ -1,0 +1,46 @@
+name: Build Custom Gaming OS
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build-iso:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Prepare Config
+        run: |
+          mkdir -p archiso_config/airootfs/root/
+          mkdir -p archiso_config/airootfs/etc/systemd/system/multi-user.target.wants/
+          cat <<EOF > archiso_config/airootfs/etc/systemd/system/optimize.service
+          [Unit]
+          Description=Extreme Gaming Optimizations
+          After=network.target
+          [Service]
+          Type=oneshot
+          ExecStart=/usr/bin/bash /root/gaming-optimizations.sh
+          RemainAfterExit=yes
+          [Install]
+          WantedBy=multi-user.target
+          EOF
+          ln -s /etc/systemd/system/optimize.service archiso_config/airootfs/etc/systemd/system/multi-user.target.wants/optimize.service
+
+      - name: Run Archiso Build
+        run: |
+          docker run --privileged -v ${{ github.workspace }}:/work archlinux:latest bash -c "
+            pacman -Syu --noconfirm archiso && 
+            cp -r /usr/share/archiso/configs/releng/* /work/archiso_config/ &&
+            cp /work/packages.x86_64 /work/archiso_config/packages.x86_64 &&
+            cp /work/gaming-optimizations.sh /work/archiso_config/airootfs/root/gaming-optimizations.sh &&
+            chmod +x /work/archiso_config/airootfs/root/gaming-optimizations.sh &&
+            mkarchiso -v -w /work/work_dir -o /work/out /work/archiso_config
+          "
+
+      - name: Upload Resulting ISO
+        uses: actions/upload-artifact@v4
+        with:
+          name: GamingOS-Installer
+          path: out/*.iso
